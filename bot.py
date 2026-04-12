@@ -2,7 +2,7 @@ import time
 import os
 from dotenv import load_dotenv
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType, ApiCreds
+from py_clob_client.clob_types import OrderArgs, OrderType
 from py_clob_client.constants import POLYGON
 
 load_dotenv()
@@ -17,19 +17,15 @@ ORDER_SIZE = 10.0
 REFRESH_INTERVAL = 30
 
 def get_client():
-    creds = ApiCreds(
-        api_key=os.getenv("POLYMARKET_API_KEY"),
-        api_secret="",
-        api_passphrase="",
-    )
-    return ClobClient(
+    client = ClobClient(
         host=HOST,
         chain_id=CHAIN_ID,
         key=os.getenv("PRIVATE_KEY"),
-        creds=creds,
         signature_type=0,
         funder=os.getenv("FUNDER_ADDRESS"),
     )
+    client.set_api_creds(client.create_or_derive_api_creds())
+    return client
 
 def get_midpoint(client, token_id):
     book = client.get_order_book(token_id)
