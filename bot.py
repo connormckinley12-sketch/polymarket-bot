@@ -14,7 +14,7 @@ SELL = "SELL"
 HOST = "https://clob.polymarket.com"
 CHAIN_ID = POLYGON
 SPREAD = 0.02
-ORDER_SIZE = 1.0
+ORDER_SIZE = 5.0
 
 def get_client():
     client = ClobClient(
