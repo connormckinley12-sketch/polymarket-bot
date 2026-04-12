@@ -1,4 +1,0 @@
-py-clob-client
-python-dotenv
-web3
-requests
