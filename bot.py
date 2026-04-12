@@ -46,7 +46,12 @@ def get_current_token_id():
             if data and len(data) > 0:
                 markets = data[0].get("markets", [])
                 if markets:
-                    token_ids = markets[0].get("clobTokenIds", [])
+                   import json
+token_ids_raw = markets[0].get("clobTokenIds", "[]")
+if isinstance(token_ids_raw, str):
+    token_ids = json.loads(token_ids_raw)
+else:
+    token_ids = token_ids_raw
                     if token_ids:
                         print(f"Found market: {slug}")
                         print(f"Token ID: {token_ids[0]}")
