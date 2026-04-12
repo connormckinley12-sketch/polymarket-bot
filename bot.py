@@ -79,7 +79,7 @@ def place_quotes(client, token_id, mid):
     ask_price = round(mid + SPREAD / 2, 4)
     bid_price = max(0.01, min(bid_price, 0.99))
     ask_price = max(0.01, min(ask_price, 0.99))
-    for side, price in [(BUY, bid_price), (SELL, ask_price)]:
+   for side, price in [(BUY, bid_price)]:
         try:
             order_args = OrderArgs(
                 token_id=token_id,
