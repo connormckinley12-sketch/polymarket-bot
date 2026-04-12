@@ -2,7 +2,8 @@ import time
 import os
 from dotenv import load_dotenv
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType, Side
+from py_clob_client.clob_types import OrderArgs, OrderType
+from py_clob_client.constants import BUY, SELL
 from py_clob_client.constants import POLYGON
 
 load_dotenv()
@@ -41,7 +42,7 @@ def place_quotes(client, token_id, mid):
     bid_price = max(0.01, min(bid_price, 0.99))
     ask_price = max(0.01, min(ask_price, 0.99))
 
-    for side, price in [(Side.BUY, bid_price), (Side.SELL, ask_price)]:
+    for side, price in [(BUY, bid_price), (SELL, ask_price)]:
         order_args = OrderArgs(
             token_id=token_id,
             price=price,
@@ -73,3 +74,4 @@ def run(token_id):
 if __name__ == "__main__":
     TOKEN_ID = os.getenv("TOKEN_ID")
     run(TOKEN_ID)
+connorm@Connors-MacBook-Air-2 polymarket-bot % 
