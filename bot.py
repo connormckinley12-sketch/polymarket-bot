@@ -22,7 +22,7 @@ def get_client():
         host=HOST,
         chain_id=CHAIN_ID,
         key=os.getenv("PRIVATE_KEY"),
-        signature_type=0,
+        signature_type=1,
         funder=os.getenv("FUNDER_ADDRESS"),
     )
     try:
