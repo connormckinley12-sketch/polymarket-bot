@@ -47,10 +47,9 @@ def get_current_token_id():
         if data and len(data) > 0:
             markets = data[0].get("markets", [])
             for market in markets:
-                if "up" in market.get("question", "").lower():
-                    token_ids = market.get("clobTokenIds", [])
-                    if token_ids:
-                        return token_ids[0], slug
+                token_ids = market.get("clobTokenIds", [])
+                if token_ids:
+                    return token_ids[0], slug
     except Exception as e:
         print(f"Error fetching market: {e}")
     return None, slug
