@@ -24,7 +24,12 @@ def get_client():
         signature_type=0,
         funder=os.getenv("FUNDER_ADDRESS"),
     )
-    client.set_api_creds(client.create_or_derive_api_creds())
+    try:
+        creds = client.create_or_derive_api_creds()
+        print(f"Got creds: {creds}")
+        client.set_api_creds(creds)
+    except Exception as e:
+        print(f"Creds error: {e}")
     return client
 
 def get_midpoint(client, token_id):
