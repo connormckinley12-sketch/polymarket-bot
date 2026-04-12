@@ -15,7 +15,7 @@ HOST = "https://clob.polymarket.com"
 CHAIN_ID = POLYGON
 SPREAD = 0.02
 ORDER_SIZE = 10.0
-REFRESH_INTERVAL = 30
+REFRESH_INTERVAL = 60
 
 def get_client():
     client = ClobClient(
