@@ -3,8 +3,7 @@ import os
 from dotenv import load_dotenv
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType
-from py_clob_client.constants import BUY, SELL
-from py_clob_client.constants import POLYGON
+from py_clob_client.constants import POLYGON, BUY, SELL
 
 load_dotenv()
 
@@ -51,7 +50,7 @@ def place_quotes(client, token_id, mid):
         )
         signed = client.create_order(order_args)
         resp = client.post_order(signed, OrderType.GTC)
-        print(f"Placed {side.name} @ {price}: {resp}")
+        print(f"Placed {side} @ {price}: {resp}")
 
 def run(token_id):
     client = get_client()
