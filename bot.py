@@ -1,6 +1,5 @@
 import time
 import os
-import math
 import requests
 from dotenv import load_dotenv
 from py_clob_client.client import ClobClient
@@ -33,26 +32,28 @@ def get_client():
     return client
 
 def get_current_token_id():
-    """Calculate the current 5-minute BTC market token ID."""
     now = int(time.time())
-    window_ts = now - (now % 300)
-    slug = f"btc-updown-5m-{window_ts}"
-    
-    try:
-        resp = requests.get(
-            f"https://gamma-api.polymarket.com/events?slug={slug}",
-            timeout=10
-        )
-        data = resp.json()
-        if data and len(data) > 0:
-            markets = data[0].get("markets", [])
-            for market in markets:
-                token_ids = market.get("clobTokenIds", [])
-                if token_ids:
-                    return token_ids[0], slug
-    except Exception as e:
-        print(f"Error fetching market: {e}")
-    return None, slug
+    # Try current and previous window in case of timing issues
+    for offset in [0, -300, 300]:
+        window_ts = now - (now % 300) + offset
+        slug = f"btc-updown-5m-{window_ts}"
+        try:
+            resp = requests.get(
+                f"https://gamma-api.polymarket.com/events?slug={slug}",
+                timeout=10
+            )
+            data = resp.json()
+            if data and len(data) > 0:
+                markets = data[0].get("markets", [])
+                if markets:
+                    token_ids = markets[0].get("clobTokenIds", [])
+                    if token_ids:
+                        print(f"Found market: {slug}")
+                        print(f"Token ID: {token_ids[0]}")
+                        return token_ids[0], slug, window_ts
+        except Exception as e:
+            print(f"Error fetching {slug}: {e}")
+    return None, None, None
 
 def get_midpoint(client, token_id):
     book = client.get_order_book(token_id)
@@ -101,41 +102,5 @@ def run():
 
     while True:
         try:
-            # Get current market
-            token_id, slug = get_current_token_id()
-            seconds_left = time_until_next_window()
-            
-            print(f"\nMarket: {slug}")
-            print(f"Seconds until expiry: {seconds_left}")
-
-            if token_id is None:
-                print("No market found, waiting...")
-                time.sleep(10)
-                continue
-
-            # Only trade if more than 30 seconds left in window
-            if seconds_left < 30:
-                print(f"Too close to expiry ({seconds_left}s), waiting for next window...")
-                time.sleep(seconds_left + 5)
-                continue
-
-            cancel_all(client)
-
-            mid = get_midpoint(client, token_id)
-            if mid is None:
-                print("No orderbook data, skipping...")
-            else:
-                print(f"Mid: {mid:.4f}")
-                place_quotes(client, token_id, mid)
-
-            # Wait until close to next window
-            sleep_time = min(seconds_left - 25, 60)
-            print(f"Sleeping {sleep_time}s...")
-            time.sleep(max(sleep_time, 10))
-
-        except Exception as e:
-            print(f"Error: {e}")
-            time.sleep(10)
-
-if __name__ == "__main__":
-    run()
+            token_id, slug, window_ts = get_current_token_id()
+            seconds_left = time
