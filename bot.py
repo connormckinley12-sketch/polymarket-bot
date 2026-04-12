@@ -1,5 +1,6 @@
 import time
 import os
+import traceback
 from dotenv import load_dotenv
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType
@@ -30,6 +31,7 @@ def get_client():
         client.set_api_creds(creds)
     except Exception as e:
         print(f"Creds error: {e}")
+        traceback.print_exc()
     return client
 
 def get_midpoint(client, token_id):
