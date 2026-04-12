@@ -14,7 +14,7 @@ SELL = "SELL"
 HOST = "https://clob.polymarket.com"
 CHAIN_ID = POLYGON
 SPREAD = 0.02
-ORDER_SIZE = 5.0
+ORDER_SIZE = 1.0
 
 def get_client():
     client = ClobClient(
@@ -79,7 +79,7 @@ def place_quotes(client, token_id, mid):
     ask_price = round(mid + SPREAD / 2, 4)
     bid_price = max(0.01, min(bid_price, 0.99))
     ask_price = max(0.01, min(ask_price, 0.99))
-   for side, price in [(BUY, bid_price)]:
+    for side, price in [(BUY, bid_price), (SELL, ask_price)]:
         try:
             order_args = OrderArgs(
                 token_id=token_id,
@@ -130,3 +130,27 @@ def run():
 
 if __name__ == "__main__":
     run()
+connorm@Connors-MacBook-Air-2 polymarket-bot % >....                            
+    except Exception as e:
+        print(f"Creds error: {e}")
+    return client
+
+def get_current_token_id():
+    now = int(time.time())
+    for offset in [0, -300, 300]:
+        window_ts = now - (now % 300) + offset
+        slug = f"btc-updown-5m-{window_ts}"
+        try:
+            resp = requests.get(
+                f"https://gamma-api.polymarket.com/events?slug={slug}",
+                timeout=10
+            )
+            data = resp.json()
+            if data and len(data) > 0:
+                markets = data[0].get("markets", [])
+                if markets:
+                    token_ids_raw = markets[0].get("clobTokenIds", "[]")
+                    if isinstance(token_ids_raw, str):
+                        token_ids = json.loads(token_ids_raw)
+                    else:
+                        token_ids = token_ids_raw
