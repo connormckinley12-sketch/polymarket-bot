@@ -103,4 +103,36 @@ def run():
     while True:
         try:
             token_id, slug, window_ts = get_current_token_id()
-            seconds_left = time
+            seconds_left = time_until_next_window()
+
+            print(f"Seconds until expiry: {seconds_left}")
+
+            if token_id is None:
+                print("No market found, waiting 30s...")
+                time.sleep(30)
+                continue
+
+            if seconds_left < 30:
+                print(f"Too close to expiry, waiting {seconds_left + 5}s...")
+                time.sleep(seconds_left + 5)
+                continue
+
+            cancel_all(client)
+
+            mid = get_midpoint(client, token_id)
+            if mid is None:
+                print("No orderbook data, skipping...")
+            else:
+                print(f"Mid: {mid:.4f}")
+                place_quotes(client, token_id, mid)
+
+            sleep_time = min(seconds_left - 25, 60)
+            print(f"Sleeping {max(sleep_time, 10)}s...")
+            time.sleep(max(sleep_time, 10))
+
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(10)
+
+if __name__ == "__main__":
+    run()
