@@ -201,7 +201,9 @@ def get_current_token_ids():
 
 def cancel_all(client):
     try:
-        client.cancel_all()
+        result = client.cancel_all()
+        print(f"Cancelled orders: {result}")
+        time.sleep(2)  # Wait for cancels to process
     except Exception as e:
         print(f"Cancel error: {e}")
 
