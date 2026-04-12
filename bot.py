@@ -15,7 +15,8 @@ SELL = "SELL"
 HOST = "https://clob.polymarket.com"
 CHAIN_ID = POLYGON
 ORDER_SIZE = 5.0
-MIN_CONFIDENCE = 3  # out of 7 indicators must agree
+MIN_CONFIDENCE = 4
+STOP_LOSS = 5.0
 
 def get_client():
     client = ClobClient(
@@ -31,6 +32,14 @@ def get_client():
     except Exception as e:
         print(f"Creds error: {e}")
     return client
+
+def get_balance(client):
+    try:
+        balance = client.get_balance()
+        return float(balance) / 1000000
+    except Exception as e:
+        print(f"Balance error: {e}")
+        return None
 
 def get_btc_candles(interval, limit):
     resp = requests.get(
@@ -83,26 +92,21 @@ def calc_vwap(closes, volumes):
 def analyze_btc():
     score = 0
     signals = []
-
     try:
-        # --- 1m candles (short term) ---
         o1, h1, l1, c1, v1 = get_btc_candles("1m", 30)
         current = c1[-1]
         print(f"\nBTC price: ${current:,.2f}")
 
-        # 1. RSI 1m
         rsi_1m = calc_rsi(c1)
         print(f"RSI 1m: {rsi_1m:.1f}")
         if rsi_1m < 45:
             score -= 1
-            signals.append("RSI_1m oversold → DOWN")
+            signals.append("RSI_1m bearish → DOWN")
         elif rsi_1m > 55:
             score += 1
-            signals.append("RSI_1m overbought → UP")
+            signals.append("RSI_1m bullish → UP")
 
-        # 2. MACD 1m
         macd, signal = calc_macd(c1)
-        print(f"MACD 1m: {macd:.2f} Signal: {signal:.2f}")
         if macd > signal:
             score += 1
             signals.append("MACD bullish → UP")
@@ -110,42 +114,33 @@ def analyze_btc():
             score -= 1
             signals.append("MACD bearish → DOWN")
 
-        # 3. Bollinger Bands 1m
         upper, mid, lower = calc_bollinger(c1)
-        print(f"Bollinger: {lower:.0f} / {mid:.0f} / {upper:.0f}")
         if current < lower:
             score += 1
-            signals.append("Below lower band → UP (mean reversion)")
+            signals.append("Below lower band → UP")
         elif current > upper:
             score -= 1
-            signals.append("Above upper band → DOWN (mean reversion)")
+            signals.append("Above upper band → DOWN")
 
-        # 4. Volume trend 1m
         avg_vol = np.mean(v1[:-1])
         last_vol = v1[-1]
         price_change = c1[-1] - c1[-2]
-        print(f"Volume: {last_vol:.2f} vs avg {avg_vol:.2f}")
         if last_vol > avg_vol * 1.2 and price_change > 0:
             score += 1
-            signals.append("High volume UP candle → UP")
+            signals.append("High volume UP → UP")
         elif last_vol > avg_vol * 1.2 and price_change < 0:
             score -= 1
-            signals.append("High volume DOWN candle → DOWN")
+            signals.append("High volume DOWN → DOWN")
 
-        # 5. VWAP 1m
         vwap = calc_vwap(c1, v1)
-        print(f"VWAP: ${vwap:.2f}")
         if current > vwap:
             score += 1
-            signals.append("Price above VWAP → UP")
+            signals.append("Above VWAP → UP")
         else:
             score -= 1
-            signals.append("Price below VWAP → DOWN")
+            signals.append("Below VWAP → DOWN")
 
-        # --- 5m candles (medium term) ---
         o5, h5, l5, c5, v5 = get_btc_candles("5m", 20)
-
-        # 6. RSI 5m
         rsi_5m = calc_rsi(c5)
         print(f"RSI 5m: {rsi_5m:.1f}")
         if rsi_5m < 45:
@@ -155,21 +150,17 @@ def analyze_btc():
             score += 1
             signals.append("RSI_5m bullish → UP")
 
-        # 7. 5m trend (EMA crossover)
         ema5 = np.mean(c5[-5:])
         ema10 = np.mean(c5[-10:])
-        print(f"EMA5: {ema5:.2f} EMA10: {ema10:.2f}")
         if ema5 > ema10:
             score += 1
-            signals.append("EMA5 > EMA10 → UP trend")
+            signals.append("EMA bullish → UP")
         else:
             score -= 1
-            signals.append("EMA5 < EMA10 → DOWN trend")
+            signals.append("EMA bearish → DOWN")
 
-        print(f"\nSignals:")
-        for s in signals:
-            print(f"  {s}")
-        print(f"Total score: {score} / 7")
+        print(f"Signals: {signals}")
+        print(f"Score: {score} / 7")
 
         if score >= MIN_CONFIDENCE:
             return "UP", current, score
@@ -236,10 +227,28 @@ def time_until_next_window():
 def run():
     client = get_client()
     print("Starting smart BTC prediction bot...")
+
+    starting_balance = get_balance(client)
+    if starting_balance is None:
+        print("Could not get starting balance, using $20 as default")
+        starting_balance = 20.0
+    print(f"Starting balance: ${starting_balance:.2f}")
+    print(f"Stop loss set at: ${starting_balance - STOP_LOSS:.2f}")
+
     while True:
         try:
+            # Check stop loss
+            current_balance = get_balance(client)
+            if current_balance is not None:
+                loss = starting_balance - current_balance
+                print(f"\nBalance: ${current_balance:.2f} | Loss: ${loss:.2f} / ${STOP_LOSS:.2f}")
+                if loss >= STOP_LOSS:
+                    print(f"STOP LOSS HIT! Lost ${loss:.2f}. Bot shutting down.")
+                    cancel_all(client)
+                    break
+
             seconds_left = time_until_next_window()
-            print(f"\n{'='*40}")
+            print(f"{'='*40}")
             print(f"Seconds until expiry: {seconds_left}")
 
             if seconds_left < 30:
@@ -248,7 +257,7 @@ def run():
                 continue
 
             direction, btc_price, score = analyze_btc()
-            print(f"\nFinal decision: {direction} (score: {score})")
+            print(f"Decision: {direction} (score: {score})")
 
             if direction == "NEUTRAL":
                 print("Signal not strong enough, skipping...")
@@ -270,8 +279,6 @@ def run():
                 print(f"Betting DOWN @ ${btc_price:,.2f}")
                 if down_token:
                     place_order(client, down_token, 0.55)
-                else:
-                    print("No down token found!")
 
             sleep_time = min(seconds_left - 25, 60)
             print(f"Sleeping {max(sleep_time, 10)}s...")
