@@ -3,9 +3,12 @@ import os
 from dotenv import load_dotenv
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType
-from py_clob_client.constants import POLYGON, BUY, SELL
+from py_clob_client.constants import POLYGON
 
 load_dotenv()
+
+BUY = "BUY"
+SELL = "SELL"
 
 HOST = "https://clob.polymarket.com"
 CHAIN_ID = POLYGON
