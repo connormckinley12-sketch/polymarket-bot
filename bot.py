@@ -74,4 +74,3 @@ def run(token_id):
 if __name__ == "__main__":
     TOKEN_ID = os.getenv("TOKEN_ID")
     run(TOKEN_ID)
-connorm@Connors-MacBook-Air-2 polymarket-bot % 
