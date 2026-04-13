@@ -60,68 +60,86 @@ def get_ensemble_forecast(city_key):
     )
     return resp.json()
 
+def celsius_to_fahrenheit(c):
+    return c * 9/5 + 32
+
 def get_daily_high_distribution(city_key, target_date):
-    """Get distribution of daily highs across all ensemble members."""
     data = get_ensemble_forecast(city_key)
     hourly = data.get("hourly", {})
     times = hourly.get("time", [])
     temp_members = [k for k in hourly.keys() if "temperature_2m" in k]
-
     date_str = target_date.strftime("%Y-%m-%d")
     day_indices = [i for i, t in enumerate(times) if t.startswith(date_str)]
-
     if not day_indices:
         return None
-
     daily_highs = []
     for member in temp_members:
         member_temps = [hourly[member][i] for i in day_indices if i < len(hourly[member])]
         if member_temps:
             daily_highs.append(max(member_temps))
-
     return np.array(daily_highs)
 
-def prob_in_range(highs, low, high):
-    """Probability that daily high falls in [low, high] range."""
-    if high is None:
-        return float(np.mean(highs >= low))
-    if low is None:
-        return float(np.mean(highs <= high))
-    return float(np.mean((highs >= low) & (highs <= high)))
-
 def parse_temperature_question(question):
-    """Parse a temperature market question into a range."""
-    q = question.lower()
-    
-    # "80°F or higher" / "80°F or above"
-    if "or higher" in q or "or above" in q:
-        import re
-        nums = re.findall(r'\d+', q)
-        if nums:
-            return int(nums[-1]), None
-    
-    # "61°F or below" / "61°F or under"
-    if "or below" in q or "or under" in q:
-        import re
-        nums = re.findall(r'\d+', q)
-        if nums:
-            return None, int(nums[-1])
-    
-    # "between 74-75°F" or "between 74°F and 75°F"
+    """
+    Parse temperature market question into (low, high, unit) tuple.
+    Returns (low_f, high_f) in Fahrenheit, or (None, X) for 'X or below',
+    or (X, None) for 'X or higher'.
+    Returns (None, None, None) if can't parse.
+    """
     import re
-    nums = re.findall(r'\d+', q)
-    temps = [int(n) for n in nums if 40 <= int(n) <= 120]
-    if len(temps) >= 2:
-        return temps[0], temps[1]
+    q = question.lower()
+
+    # Detect unit
+    is_celsius = "°c" in q or " c " in q or q.endswith("c?") or q.endswith("c")
+
+    # Extract all numbers
+    nums = [int(n) for n in re.findall(r'\d+', q)]
     
-    return None, None
+    # Filter to temperature-range numbers only
+    if is_celsius:
+        temps = [n for n in nums if 0 <= n <= 50]
+    else:
+        temps = [n for n in nums if 40 <= n <= 130]
+
+    if not temps:
+        return None, None, None
+
+    # "X or higher" / "X or above"
+    if "or higher" in q or "or above" in q:
+        threshold = temps[-1]
+        if is_celsius:
+            threshold = celsius_to_fahrenheit(threshold)
+        return threshold, None, "above"
+
+    # "X or below" / "X or under"
+    if "or below" in q or "or under" in q:
+        threshold = temps[-1]
+        if is_celsius:
+            threshold = celsius_to_fahrenheit(threshold)
+        return None, threshold, "below"
+
+    # "between X-Y" or "between X and Y"
+    if len(temps) >= 2:
+        low, high = temps[0], temps[1]
+        if is_celsius:
+            low = celsius_to_fahrenheit(low)
+            high = celsius_to_fahrenheit(high)
+        return low, high, "range"
+
+    return None, None, None
+
+def prob_for_market(highs, low, high, market_type):
+    """Calculate probability given ensemble highs and market type."""
+    if market_type == "above":
+        return float(np.mean(highs >= low))
+    elif market_type == "below":
+        return float(np.mean(highs <= high))
+    elif market_type == "range":
+        return float(np.mean((highs >= low) & (highs <= high)))
+    return None
 
 def find_weather_markets_for_date(target_date):
-    """Find all temperature markets for a specific date."""
-    date_str = target_date.strftime("%B %-d").lower()
-    date_str2 = target_date.strftime("%B %d").lower()
     markets = []
-    
     try:
         resp = requests.get(
             "https://gamma-api.polymarket.com/events",
@@ -154,11 +172,9 @@ def find_weather_markets_for_date(target_date):
                     })
     except Exception as e:
         print(f"Market fetch error: {e}")
-    
     return markets
 
 def find_city_for_market(market_title):
-    """Match a market title to a city key."""
     title = market_title.lower()
     for city_key, city_data in CITIES.items():
         for alias in city_data["aliases"]:
@@ -168,11 +184,9 @@ def find_city_for_market(market_title):
 
 def run():
     client = get_client()
-    print("Starting Weather Edge Bot v2...")
+    print("Starting Weather Edge Bot v3 (bug fixed)...")
     print(f"Cities: {list(CITIES.keys())}")
     print(f"Min edge: {MIN_EDGE:.0%} | Stop loss: ${STOP_LOSS}")
-
-    starting_balance = 10.0
 
     while True:
         try:
@@ -182,7 +196,6 @@ def run():
             tomorrow = datetime.utcnow().date() + timedelta(days=1)
             print(f"Target date: {tomorrow}")
 
-            # Find markets for tomorrow
             markets = find_weather_markets_for_date(tomorrow)
             print(f"Found {len(markets)} temperature markets")
 
@@ -191,7 +204,7 @@ def run():
                 time.sleep(3600)
                 continue
 
-            # Group markets by city
+            # Group by city
             city_markets = {}
             for market in markets:
                 city_key = find_city_for_market(market["title"])
@@ -202,33 +215,43 @@ def run():
 
             print(f"Cities with markets: {list(city_markets.keys())}")
 
-            # Analyze each city
             bets = []
             for city_key, city_mkt_list in city_markets.items():
                 print(f"\n--- {city_key.upper()} ---")
                 try:
                     highs = get_daily_high_distribution(city_key, tomorrow)
                     if highs is None:
-                        print(f"No forecast data for {city_key}")
                         continue
-                    
                     mean_high = np.mean(highs)
                     std_high = np.std(highs)
                     print(f"Ensemble: mean={mean_high:.1f}°F std={std_high:.1f}°F ({len(highs)} members)")
 
                     for market in city_mkt_list:
-                        low, high = parse_temperature_question(market["question"])
-                        if low is None and high is None:
+                        low, high, mtype = parse_temperature_question(market["question"])
+                        if mtype is None:
                             continue
-                        
-                        our_prob = prob_in_range(highs, low, high)
+
+                        # Sanity check: skip extreme threshold markets
+                        # "or higher" bets: threshold must be within 2 std of mean
+                        if mtype == "above" and low > mean_high + 2 * std_high:
+                            print(f"  SKIP (threshold too high): {market['question']}")
+                            continue
+                        # "or below" bets: threshold must be within 2 std of mean
+                        if mtype == "below" and high < mean_high - 2 * std_high:
+                            print(f"  SKIP (threshold too low): {market['question']}")
+                            continue
+
+                        our_prob = prob_for_market(highs, low, high, mtype)
+                        if our_prob is None:
+                            continue
+
                         market_price = market["price"]
                         edge = our_prob - market_price
 
                         print(f"  {market['question']}")
                         print(f"  Our: {our_prob:.1%} | Market: {market_price:.1%} | Edge: {edge:+.1%}")
 
-                        if abs(edge) >= MIN_EDGE and our_prob > 0.05:
+                        if abs(edge) >= MIN_EDGE and 0.03 < our_prob < 0.97:
                             bets.append({
                                 "market": market,
                                 "our_prob": our_prob,
@@ -240,28 +263,26 @@ def run():
                 except Exception as e:
                     print(f"Error analyzing {city_key}: {e}")
 
-            # Sort by edge size
             bets = sorted(bets, key=lambda x: abs(x["edge"]), reverse=True)
             print(f"\n{'='*50}")
-            print(f"Found {len(bets)} betting opportunities!")
+            print(f"Found {len(bets)} valid betting opportunities!")
 
             for bet in bets[:5]:
                 print(f"\n✅ {bet['market']['question']}")
                 print(f"   Edge: {bet['edge']:+.1%} | Our: {bet['our_prob']:.1%} | Market: {bet['market_price']:.1%}")
-                
+
                 if bet["edge"] > 0:
-                    # Bet YES
-                    price = min(bet["our_prob"] - 0.02, 0.95)
+                    price = min(round(bet["our_prob"] - 0.02, 2), 0.90)
                     try:
                         order_args = OrderArgs(
                             token_id=bet["market"]["token_id"],
-                            price=round(price, 2),
+                            price=price,
                             size=ORDER_SIZE,
                             side=BUY,
                         )
                         signed = client.create_order(order_args)
                         resp = client.post_order(signed, OrderType.GTC)
-                        print(f"   Placed YES bet @ {price:.2f}: {resp}")
+                        print(f"   Placed YES bet @ {price}: {resp}")
                     except Exception as e:
                         print(f"   Bet error: {e}")
 
