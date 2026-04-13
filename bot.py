@@ -35,8 +35,13 @@ def get_client():
 
 def get_balance(client):
     try:
-        balance = client.get_balance()
-        return float(balance) / 1000000
+        resp = requests.get(
+            "https://clob.polymarket.com/balance",
+            headers={"Authorization": f"Bearer {os.getenv('POLYMARKET_API_KEY')}"},
+            timeout=10
+        )
+        data = resp.json()
+        return float(data.get("balance", 0)) / 1000000
     except Exception as e:
         print(f"Balance error: {e}")
         return None
