@@ -284,6 +284,8 @@ def run():
             print("\nScanning Polymarket for weather markets...")
             markets = find_weather_markets()
             print(f"Found {len(markets)} weather markets")
+            for m in markets[:15]:
+    print(f"  - {m['question']}")
 
             if markets:
                 # Find edges
