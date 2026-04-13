@@ -91,7 +91,9 @@ def parse_temperature_question(question):
 
     # Detect unit
     is_celsius = "°c" in q or " c " in q or q.endswith("c?") or q.endswith("c")
-
+# Skip Celsius markets entirely
+    if is_celsius:
+        return None, None, None
     # Extract all numbers
     nums = [int(n) for n in re.findall(r'\d+', q)]
     
